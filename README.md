@@ -9,6 +9,7 @@ This is an implementation of [1].
 It utilises the [AbstractGPs.jl](https://github.com/JuliaGaussianProcesses/AbstractGPs.jl) interface, so should play nicely with any `AbstractGP`, including those from [Stheno.jl](https://github.com/JuliaGaussianProcesses/Stheno.jl) and [TemporalGPs.jl](https://github.com/JuliaGaussianProcesses/TemporalGPs.jl).
 No attempt has been made to make this implementation work for anything other than Gaussian processes.
 
-This approximations does not presently play nicely with pseudo-point approximations, although one could certainly attempt to find ways to make it do so.
+This approximation does not presently play nicely with pseudo-point approximations.
+That would be an interesting research direction.
 
 [1] - Khan, Mohammad, and Wu Lin. "Conjugate-computation variational inference: Converting variational inference in non-conjugate models to inferences in conjugate models." Artificial Intelligence and Statistics. PMLR, 2017.
