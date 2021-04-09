@@ -1,9 +1,11 @@
 using AbstractGPs
 using ConjugateComputationVI
+using Distributions
 using KernelFunctions
 using Random
 using TemporalGPs
 using Test
+using Zygote
 
 using ConjugateComputationVI:
     approx_posterior,
@@ -60,29 +62,33 @@ end
         @test mean.(ms_exact) ≈ mean.(ms_approx)
         @test std.(ms_exact) ≈ std.(ms_approx)
     end
-    # @testset "update_approx_posterior" begin
-    #     f, x, σ², y = generate_synthetic_problem(MersenneTwister(123456))
+    @testset "update_approx_posterior" begin
+        f, x, σ², y = generate_synthetic_problem(MersenneTwister(123456))
 
-    #     @testset "optimal parameters don't move" begin
+        # Specify reconstruction term for simple Gaussian likelihood.
+        r(m̃, σ̃²) = sum(logpdf.(Normal.(m̃, sqrt.(σ²)), y) .- σ̃² ./ (2 .* σ²))
+        ∇r = (m̃, σ̃²) -> Zygote.gradient(r, m̃, σ̃²)
 
-    #         # Run a step of the update procedure.
-    #         η1, η2 = natural_from_canonical(y, σ²)
-    #         η1_new, η2_new = update_approx_posterior(f, x, η1, η2, ∇r, 1.0)
+        @testset "optimal parameters don't move" begin
 
-    #         # Verify that the new parameters are equal to the old parameters.
-    #         @test η1 ≈ η1_new
-    #         @test η2 ≈ η2_new
-    #     end
+            # Run a step of the update procedure.
+            η1, η2 = natural_from_canonical(y, σ²)
+            η1_new, η2_new = update_approx_posterior(f, x, η1, η2, ∇r, 1.0)
 
-    #     # Verify the optimal approximate posterior parameters are found after only a single
-    #     # iteration of the algorithm in the Gaussian case.
-    #     @testset "optimal in 1 step" begin
-    #         η1, η2 = natural_pseudo_obs(y .+ randn(length(y)), σ² .+ rand(length(y)))
-    #         η1_opt, η2_opt = update_approx_posterior(f, x, η1, η2, ∇r, 1.0)
+            # Verify that the new parameters are equal to the old parameters.
+            @test η1 ≈ η1_new
+            @test η2 ≈ η2_new
+        end
 
-    #         y_opt, σ²_opt = canonical_from_natural(η1_opt, η2_opt)
-    #         @test y ≈ y_opt
-    #         @test σ² ≈ σ²_opt
-    #     end
-    # end
+        # Verify the optimal approximate posterior parameters are found after only a single
+        # iteration of the algorithm in the Gaussian case.
+        @testset "optimal in 1 step" begin
+            η1, η2 = natural_from_canonical(y .+ randn(length(y)), σ² .+ rand(length(y)))
+            η1_opt, η2_opt = update_approx_posterior(f, x, η1, η2, ∇r, 1.0)
+
+            y_opt, σ²_opt = canonical_from_natural(η1_opt, η2_opt)
+            @test y ≈ y_opt
+            @test σ² ≈ σ²_opt
+        end
+    end
 end

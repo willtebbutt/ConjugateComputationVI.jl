@@ -1,6 +1,7 @@
 module ConjugateComputationVI
 
 using AbstractGPs
+using Zygote
 
 using AbstractGPs: AbstractGP
 
@@ -55,6 +56,16 @@ function approx_posterior(
     return posterior(f(x, σ²), y)
 end
 
+"""
+    update_approx_posterior(
+        f::AbstractGP,
+        x::AbstractVector,
+        η1::AbstractVector{<:Real},
+        η2::AbstractVector{<:Real},
+        ∇r,
+        ρ::Real,
+    )
+"""
 function update_approx_posterior(
     f::AbstractGP,
     x::AbstractVector,
@@ -75,7 +86,11 @@ function update_approx_posterior(
 
     # Compute the gradient w.r.t. both of the expectation parameters. This is equivalent to
     # the natural gradient w.r.t. the natural parameters.
-    g1, g2 = ∇r(m1, m2)
+    compute_grad = (m1, m2) -> begin
+        (m, σ²), pb = Zygote.pullback(canonical_from_expectation, m1, m2)
+        return pb(∇r(m, σ²))
+    end
+    g1, g2 = compute_grad(m1, m2)
 
     # Perform a step of gradient ascent in the natural pseudo observations.
     η1_new = (1 - ρ) .* η1 .+ ρ .* g1
