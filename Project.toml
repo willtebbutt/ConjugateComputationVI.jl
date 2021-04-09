@@ -1,6 +1,6 @@
 name = "ConjugateComputationVI"
 uuid = "f4ace912-77ac-4801-b600-bd6f88c28557"
-authors = ["WT <wt0881@my.bristol.ac.uk> and contributors"]
+authors = ["Will Tebbutt and contributors"]
 version = "0.1.0"
 
 [compat]
