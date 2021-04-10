@@ -2,7 +2,6 @@ using AbstractGPs
 using ConjugateComputationVI
 using Distributions
 using KernelFunctions
-using Quadrature
 using Random
 # using TemporalGPs
 using Test
@@ -21,8 +20,8 @@ using ConjugateComputationVI:
 
 function generate_synthetic_problem(rng::AbstractRNG)
     f = GP(Matern52Kernel())
-    x = collect(range(-5.0, 5.0; length=31))
-    σ² = rand(rng, 31) .+ 1e-2
+    x = collect(range(-2.0, 2.0; length=7))
+    σ² = rand(rng, 7) .+ 1e-2
     y = rand(rng, f(x, σ²))
     return f, x, σ², y
 end
@@ -203,6 +202,43 @@ end
 
             # Verify that the gradient w.r.t. everything can be computed using Zygote.
             Zygote.gradient(elbo, f, x, η1, η2, r)
+        end
+    end
+    @testset "Bernoulli likelihood via Quadrature" begin
+        # Really all that we can do here is ensure that it converges and that the ELBO
+        # is _something_.
+        f, x, _, _ = generate_synthetic_problem(MersenneTwister(123456))
+        y = rand.(Bernoulli.(logistic.(rand(f(x, 1e-4)))))
+        function make_integrand(y)
+            return f -> logpdf(Bernoulli(logistic(f)), y)
+        end
+        integrands = map(make_integrand, y)
+
+        # Specify the reconstruction term.
+        r(m̃, σ̃²) = sum(batch_quadrature(integrands, m̃, sqrt.(σ̃²), 25))
+
+        # Set initial parameters to be... something.
+        η1_0 = randn(length(y))
+        η2_0 = - rand(length(y))
+
+        @testset "solutions converge to the same thing" begin
+            solutions = map([0.1, 0.5, 0.9, 0.95, 0.99]) do ρ
+                η1_opt, η2_opt, iteration, delta_norm = optimise_approx_posterior(
+                    f, x, η1_0, η2_0, r, ρ,
+                )
+                return η1_opt, η2_opt
+            end
+            ref_solutions = first(solutions)
+            @test all(isapprox.(first.(solutions), Ref(ref_solutions[1]); rtol=1e-6))
+            @test all(isapprox.(last.(solutions), Ref(ref_solutions[2]); rtol=1e-6))
+        end
+        @testset "elbo" begin
+
+            # Check that we can compute the ELBO. There's nothing obvious to compare it to.
+            elbo(f, x, η1_0, η2_0, r)
+
+            # Verify that the gradient w.r.t. everything can be computed using Zygote.
+            Zygote.gradient(elbo, f, x, η1_0, η2_0, r)
         end
     end
 end
