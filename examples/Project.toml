@@ -1,0 +1,4 @@
+[deps]
+AbstractGPs = "99985d1d-32ba-4be9-9821-2ec096f28918"
+ConjugateComputationVI = "f4ace912-77ac-4801-b600-bd6f88c28557"
+RDatasets = "ce6b1742-4840-55fa-b093-852dadbb1d8b"
