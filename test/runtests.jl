@@ -12,6 +12,7 @@ using ConjugateComputationVI:
     canonical_from_expectation,
     canonical_from_natural,
     expectation_from_canonical,
+    gaussian_reconstruction_term,
     natural_from_canonical,
     optimise_approx_posterior,
     update_approx_posterior
@@ -44,6 +45,13 @@ end
             @test y_recovered ≈ y
             @test σ² ≈ σ²_recovered
         end
+    end
+    @testset "gaussian_reconstruction_term" begin
+        _, _, σ², y = generate_synthetic_problem(MersenneTwister(123456))
+        m̃ = randn(size(y))
+        σ̃² = rand(length(y)) .+ 1
+        gaussian_reconstruction_term(y, σ², m̃, σ̃²)
+        Zygote.gradient(gaussian_reconstruction_term, y, σ², m̃, σ̃²)
     end
     @testset "approx_posterior" begin
         f, x, σ², y = generate_synthetic_problem(MersenneTwister(123456))
@@ -103,8 +111,9 @@ end
         f, x, σ², y = generate_synthetic_problem(MersenneTwister(123456))
 
         # Reconstruction term and its gradient for Gaussian likelihood.
-        r(m̃, σ̃²) = sum(logpdf.(Normal.(m̃, sqrt.(σ²)), y) .- σ̃² ./ (2 .* σ²))
-        ∇r = (m̃, σ̃²) -> Zygote.gradient(r, m̃, σ̃²)
+        ∇r = (m̃, σ̃²) -> begin
+            Zygote.gradient((m̃, σ̃²) -> gaussian_reconstruction_term(y, σ², m̃, σ̃²), m̃, σ̃²)
+        end
 
         @testset "converges quickly for step size $ρ" for ρ in [0.1, 0.5, 0.9, 1.0]
             η1, η2 = natural_from_canonical(y, σ²)
@@ -114,5 +123,25 @@ end
             @test η1_opt ≈ η1
             @test η2_opt ≈ η2
         end
+    end
+    @testset "elbo" begin
+        f, x, σ², y = generate_synthetic_problem(MersenneTwister(123456))
+
+        # Set initial parameters to be sub-optimal.
+        η1, η2 = natural_from_canonical(y, σ²)
+        η1_0 = η1 + randn(length(η1))
+        η2_0 = η2 - rand(length(y))
+
+        # Specify the reconstruction term.
+        r(m̃, σ̃²) = gaussian_reconstruction_term(y, σ², m̃, σ̃²)
+
+        # Verify that the ELBO is less than the log marginal likelihood for a Gaussian.
+        @test elbo(f, x, η1_0, η2_0, r) < logpdf(f(x, σ²), y)
+
+        # Verify that the ELBO equals the log marginal likelihood at the optimum.
+        @test elbo(f, x, η1, η2, r) ≈ logpdf(f(x, σ²), y)
+
+        # Verify that the gradient w.r.t. everything can be computed using Zygote.
+        Zygote.gradient(elbo, f, x, η1, η2, r)
     end
 end

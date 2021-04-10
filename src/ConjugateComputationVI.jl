@@ -1,6 +1,8 @@
 module ConjugateComputationVI
 
 using AbstractGPs
+using Distributions
+using LinearAlgebra
 using Zygote
 
 using AbstractGPs: AbstractGP
@@ -33,6 +35,25 @@ end
 """
 function canonical_from_expectation(m1::AbstractVector{<:Real}, m2::AbstractVector{<:Real})
     return m1, m2 .- m1.^2
+end
+
+"""
+    gaussian_reconstruction_term(
+        y::AbstractVector{<:Real},
+        σ²::AbstractVector{<:Real},
+        m̃::AbstractVector{<:Real},
+        σ̃²::AbstractVector{<:Real},
+    )
+"""
+function gaussian_reconstruction_term(
+    y::AbstractVector{<:Real},
+    σ²::AbstractVector{<:Real},
+    m̃::AbstractVector{<:Real},
+    σ̃²::AbstractVector{<:Real},
+)
+    return sum(
+        map((y, σ², m̃, σ̃²) -> logpdf(Normal(m̃, sqrt(σ²)), y) - σ̃² / (2σ²), y, σ², m̃, σ̃²),
+    )
 end
 
 """
@@ -86,6 +107,7 @@ function update_approx_posterior(
 
     # Compute the gradient w.r.t. both of the expectation parameters. This is equivalent to
     # the natural gradient w.r.t. the natural parameters.
+    m, σ² = canonical_from_expectation(m1, m2)
     compute_grad = (m1, m2) -> begin
         (m, σ²), pb = Zygote.pullback(canonical_from_expectation, m1, m2)
         return pb(∇r(m, σ²))
@@ -133,6 +155,31 @@ function optimise_approx_posterior(
         iteration += 1
     end
     return η1, η2, iteration, delta_norm
+end
+
+"""
+    elbo(
+        f::AbstractGP,
+        x::AbstractVector,
+        η1::AbstractVector{<:Real},
+        η2::AbstractVector{<:Real},
+        r,
+    )
+"""
+function AbstractGPs.elbo(
+    f::AbstractGP,
+    x::AbstractVector,
+    η1::AbstractVector{<:Real},
+    η2::AbstractVector{<:Real},
+    r,
+)
+    ỹ, σ̃² = canonical_from_natural(η1, η2)
+
+    # Compute reconstruction term under Gaussian pseudo-likelihood.
+    approx_post_marginals = marginals(approx_posterior(f, x, η1, η2)(x))
+    mq = mean.(approx_post_marginals)
+    σ²q = var.(approx_post_marginals)
+    return logpdf(f(x, σ̃²), ỹ) + r(mq, σ²q) - gaussian_reconstruction_term(ỹ, σ̃², mq, σ²q)
 end
 
 end
