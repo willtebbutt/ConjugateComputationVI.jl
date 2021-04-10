@@ -65,11 +65,11 @@ end
     @testset "update_approx_posterior" begin
         f, x, σ², y = generate_synthetic_problem(MersenneTwister(123456))
 
-        # Specify reconstruction term for simple Gaussian likelihood.
+        # Reconstruction term and its gradient for Gaussian likelihood.
         r(m̃, σ̃²) = sum(logpdf.(Normal.(m̃, sqrt.(σ²)), y) .- σ̃² ./ (2 .* σ²))
         ∇r = (m̃, σ̃²) -> Zygote.gradient(r, m̃, σ̃²)
 
-        @testset "optimal parameters don't move" begin
+        @testset "optimal parameters don't change when updated" begin
 
             # Run a step of the update procedure.
             η1, η2 = natural_from_canonical(y, σ²)
@@ -83,9 +83,12 @@ end
         # Verify the optimal approximate posterior parameters are found after only a single
         # iteration of the algorithm in the Gaussian case.
         @testset "optimal in 1 step" begin
+
+            # Perform a single update step with unit step size.
             η1, η2 = natural_from_canonical(y .+ randn(length(y)), σ² .+ rand(length(y)))
             η1_opt, η2_opt = update_approx_posterior(f, x, η1, η2, ∇r, 1.0)
 
+            # Ensure that we've reached the optimum (the exact posterior).
             y_opt, σ²_opt = canonical_from_natural(η1_opt, η2_opt)
             @test y ≈ y_opt
             @test σ² ≈ σ²_opt
