@@ -96,7 +96,43 @@ function update_approx_posterior(
     η1_new = (1 - ρ) .* η1 .+ ρ .* g1
     η2_new = (1 - ρ) .* η2 .+ ρ .* g2
 
-    return η1_new, η2_new
+    return η1_new, η2_new, g1, g2
+end
+
+"""
+    optimise_approx_posterior(
+        f::AbstractGP,
+        x::AbstractVector,
+        η1::AbstractVector{<:Real},
+        η2::AbstractVector{<:Real},
+        ∇r,
+        ρ::Real;
+        max_iterations=1_000,
+        gtol=1e-8,
+    )
+"""
+function optimise_approx_posterior(
+    f::AbstractGP,
+    x::AbstractVector,
+    η1::AbstractVector{<:Real},
+    η2::AbstractVector{<:Real},
+    ∇r,
+    ρ::Real;
+    max_iterations=1_000,
+    tol=1e-8,
+)
+    # Perform initial iteration.
+    η1, η2, g1, g2 = update_approx_posterior(f, x, η1, η2, ∇r, ρ)
+    delta_norm = sqrt(sum(abs2, η1 - g1) + sum(abs2, η2 - g2))
+    iteration = 0
+
+    # Iterate further until convergence met or max iterations exceeded.
+    while delta_norm > tol && iteration < max_iterations
+        η1, η2, g1, g2 = update_approx_posterior(f, x, η1, η2, ∇r, ρ)
+        delta_norm = sqrt(sum(abs2, η1 - g1) + sum(abs2, η2 - g2))
+        iteration += 1
+    end
+    return η1, η2, iteration, delta_norm
 end
 
 end

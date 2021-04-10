@@ -13,6 +13,7 @@ using ConjugateComputationVI:
     canonical_from_natural,
     expectation_from_canonical,
     natural_from_canonical,
+    optimise_approx_posterior,
     update_approx_posterior
 
 function generate_synthetic_problem(rng::AbstractRNG)
@@ -73,11 +74,13 @@ end
 
             # Run a step of the update procedure.
             η1, η2 = natural_from_canonical(y, σ²)
-            η1_new, η2_new = update_approx_posterior(f, x, η1, η2, ∇r, 1.0)
+            η1_new, η2_new, g1, g2 = update_approx_posterior(f, x, η1, η2, ∇r, 1.0)
 
             # Verify that the new parameters are equal to the old parameters.
             @test η1 ≈ η1_new
             @test η2 ≈ η2_new
+            @test g1 ≈ η1_new
+            @test g2 ≈ η2_new
         end
 
         # Verify the optimal approximate posterior parameters are found after only a single
@@ -86,12 +89,30 @@ end
 
             # Perform a single update step with unit step size.
             η1, η2 = natural_from_canonical(y .+ randn(length(y)), σ² .+ rand(length(y)))
-            η1_opt, η2_opt = update_approx_posterior(f, x, η1, η2, ∇r, 1.0)
+            η1_opt, η2_opt, g1, g2 = update_approx_posterior(f, x, η1, η2, ∇r, 1.0)
 
             # Ensure that we've reached the optimum (the exact posterior).
             y_opt, σ²_opt = canonical_from_natural(η1_opt, η2_opt)
             @test y ≈ y_opt
             @test σ² ≈ σ²_opt
+            @test g1 ≈ η1_opt
+            @test g2 ≈ η2_opt
+        end
+    end
+    @testset "optimise_approx_posterior" begin
+        f, x, σ², y = generate_synthetic_problem(MersenneTwister(123456))
+
+        # Reconstruction term and its gradient for Gaussian likelihood.
+        r(m̃, σ̃²) = sum(logpdf.(Normal.(m̃, sqrt.(σ²)), y) .- σ̃² ./ (2 .* σ²))
+        ∇r = (m̃, σ̃²) -> Zygote.gradient(r, m̃, σ̃²)
+
+        @testset "converges quickly for step size $ρ" for ρ in [0.1, 0.5, 0.9, 1.0]
+            η1, η2 = natural_from_canonical(y, σ²)
+            η1_0 = η1 + randn(length(η1))
+            η2_0 = η2 - rand(length(y))
+            η1_opt, η2_opt, _, _ = optimise_approx_posterior(f, x, η1_0, η2_0, ∇r, ρ)
+            @test η1_opt ≈ η1
+            @test η2_opt ≈ η2
         end
     end
 end
