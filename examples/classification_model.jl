@@ -68,9 +68,6 @@ r(m̃, σ̃²) = sum(batch_quadrature(integrands, m̃, sqrt.(σ̃²), 10))
 
 function objective(θ::AbstractVector{<:Real})
 
-    # Regularise the parameters a bit. Don't want them to be too large.
-    regularisation = 0.0 * sum(abs2, θ)
-
     # Unflatten θ and build the model at the current hyperparameters.
     f = build_gp(θ)
 
@@ -87,7 +84,7 @@ function objective(θ::AbstractVector{<:Real})
     end
 
     # Compute the negation of the elbo.
-    return -elbo(f, x_tr, η1_opt, η2_opt, r) + regularisation
+    return -elbo(f, x_tr, η1_opt, η2_opt, r)
 end
 
 objective(θ_init_flat)
