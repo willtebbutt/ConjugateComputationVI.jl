@@ -37,6 +37,10 @@ function canonical_from_expectation(m1::AbstractVector{<:Real}, m2::AbstractVect
     return m1, m2 .- m1.^2
 end
 
+function fisher(m1, m2)
+    return [(m2 + m1^2) -m1; -m1 1 / 2] / (m2 - m1^2)^2
+end
+
 """
     gaussian_reconstruction_term(
         y::AbstractVector{<:Real},
@@ -74,7 +78,7 @@ function approx_posterior(
     η2::AbstractVector{<:Real},
 )
     y, σ² = canonical_from_natural(η1, η2)
-    return posterior(f(x, σ²), y)
+    return posterior(f(x, σ² .+ 1e-6), y)
 end
 
 """
@@ -109,7 +113,7 @@ function update_approx_posterior(
     # the natural gradient w.r.t. the natural parameters.
     g1, g2 = Zygote.gradient((m1, m2) -> r(canonical_from_expectation(m1, m2)...), m1, m2)
 
-    # Perform a step of gradient ascent in the natural pseudo observations.
+    # Perform a step of NGA in the first natural pseudo-observation vector.
     η1_new = (1 - ρ) .* η1 .+ ρ .* g1
     η2_new = (1 - ρ) .* η2 .+ ρ .* g2
 
