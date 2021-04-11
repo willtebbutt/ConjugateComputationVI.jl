@@ -3,6 +3,7 @@ module ConjugateComputationVI
 using AbstractGPs
 using Distributions
 using FastGaussQuadrature
+using LinearAlgebra
 using Zygote
 
 using AbstractGPs: AbstractGP
