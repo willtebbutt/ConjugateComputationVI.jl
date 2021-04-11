@@ -3,6 +3,7 @@ using ConjugateComputationVI
 using Distributions
 using KernelFunctions
 using Random
+using StatsFuns
 # using TemporalGPs
 using Test
 using Zygote
@@ -69,8 +70,8 @@ end
         x_test = range(-7.5, 7.5; length=101)
         ms_exact = marginals(f_post_exact(x_test))
         ms_approx = marginals(f_post_approx(x_test))
-        @test mean.(ms_exact) ≈ mean.(ms_approx)
-        @test std.(ms_exact) ≈ std.(ms_approx)
+        @test mean.(ms_exact) ≈ mean.(ms_approx) rtol=1e-6
+        @test std.(ms_exact) ≈ std.(ms_approx) rtol=1e-6
     end
     @testset "update_approx_posterior" begin
         f, x, σ², y = generate_synthetic_problem(MersenneTwister(123456))
