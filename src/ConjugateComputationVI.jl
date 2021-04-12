@@ -150,8 +150,10 @@ function optimise_approx_posterior(
 
     # Iterate further until convergence met or max iterations exceeded.
     while delta_norm > tol && iteration < max_iterations
+        η1_prev = η1
+        η2_prev = η2
         η1, η2, g1, g2 = update_approx_posterior(f, x, η1, η2, r, ρ)
-        delta_norm = sqrt(sum(abs2, η1 - g1) + sum(abs2, η2 - g2))
+        delta_norm = sqrt(sum(abs2, η1_prev - g1) + sum(abs2, η2_prev - g2))
         iteration += 1
     end
     return η1, η2, iteration, delta_norm
