@@ -118,7 +118,7 @@ function update_approx_posterior(
     η1_new = (1 - ρ) .* η1 .+ ρ .* g1
     η2_new = (1 - ρ) .* η2 .+ ρ .* g2
 
-    return η1_new, η2_new, g1, g2
+    return η1_new, η2_new, sqrt(sum(abs2, g1 - η1) + sum(abs2, g2 - η2))
 end
 
 """
@@ -144,16 +144,12 @@ function optimise_approx_posterior(
     tol=1e-8,
 )
     # Perform initial iteration.
-    η1, η2, g1, g2 = update_approx_posterior(f, x, η1, η2, r, ρ)
-    delta_norm = sqrt(sum(abs2, η1 - g1) + sum(abs2, η2 - g2))
-    iteration = 0
+    η1, η2, delta_norm = update_approx_posterior(f, x, η1, η2, r, ρ)
+    iteration = 1
 
     # Iterate further until convergence met or max iterations exceeded.
     while delta_norm > tol && iteration < max_iterations
-        η1_prev = η1
-        η2_prev = η2
-        η1, η2, g1, g2 = update_approx_posterior(f, x, η1, η2, r, ρ)
-        delta_norm = sqrt(sum(abs2, η1_prev - g1) + sum(abs2, η2_prev - g2))
+        η1, η2, delta_norm = update_approx_posterior(f, x, η1, η2, r, ρ)
         iteration += 1
     end
     return η1, η2, iteration, delta_norm

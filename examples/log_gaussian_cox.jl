@@ -60,6 +60,9 @@ function make_integrand(y)
     return (f -> logpdf(Poisson(exp(f)), y))
 end
 
+__η1 = zeros(length(x));
+__η2 = -ones(length(x));
+
 # Specify objective function.
 objective(θ::AbstractVector{<:Real}) = objective(ParameterHandling.value(unflatten(θ)))
 function objective(θ::NamedTuple)
@@ -74,11 +77,11 @@ function objective(θ::NamedTuple)
     # Optimise the approximate posterior. Drop the gradient because we're differentiating
     # through the optimum.
     η1_opt, η2_opt = Zygote.ignore() do
-        η1_0 = zeros(length(x))
-        η2_0 = -ones(length(x))
         η1, η2, iters, delta = optimise_approx_posterior(
-            f, x, η1_0, η2_0, r, 1 - 1e-9; tol=1e-12, max_iterations=50,
+            f, x, __η1, __η2, r, 1; tol=1e-4,
         )
+        __η1 .= η1
+        __η2 .= η2
         println((iters, delta))
         return η1, η2
     end
@@ -113,12 +116,10 @@ f = build_gp(θ_opt)
 
 # f = build_gp(θ_init_flat)
 integrands = map(make_integrand, y)
-r(m̃, σ̃²) = sum(batch_quadrature(integrands, m̃, sqrt.(σ̃²), 10))
+r(m̃, σ̃²) = sum(batch_quadrature(integrands, m̃, sqrt.(σ̃²), 15))
 
-η1_0 = zeros(length(x));
-η2_0 = -ones(length(x));
 η1, η2, iters, delta = optimise_approx_posterior(
-    f, x, η1_0, η2_0, r, 1 - 1e-3; tol=1e-12,
+    f, x, __η1, __η2, r, 1; tol=1e-4,
 )
 
 # Make predictions for the observations and the latent function.

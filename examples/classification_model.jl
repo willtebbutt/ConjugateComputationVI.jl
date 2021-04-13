@@ -36,23 +36,23 @@ scatter!(virginica.SepalLength, virginica.SepalWidth; label="Virginica")
 y = map(x -> x == "setosa" ? 1 : 0, iris.Species)
 
 # Construct input matrix from feature columns.
-X = hcat(iris.SepalLength, iris.SepalWidth)
-x = ColVecs(collect(X'))
+X = hcat(iris.SepalLength, iris.SepalWidth);
+x = ColVecs(collect(X'));
 
 # Split into train and test sets.
-train_indices = randperm(length(y))[1:50]
-test_indices = setdiff(eachindex(y), train_indices)
-x_tr = x[train_indices]
-x_te = x[test_indices]
-y_tr = y[train_indices]
-y_te = y[test_indices]
+train_indices = randperm(MersenneTwister(123456), length(y))[1:50];
+test_indices = setdiff(eachindex(y), train_indices);
+x_tr = x[train_indices];
+x_te = x[test_indices];
+y_tr = y[train_indices];
+y_te = y[test_indices];
 
 θ_init = (
     scale=fixed(1.0),
     stretch=positive.(ones(2)),
-)
+);
 
-θ_init_flat, unflatten = ParameterHandling.flatten(θ_init)
+θ_init_flat, unflatten = ParameterHandling.flatten(θ_init);
 
 build_gp(θ::AbstractVector{<:Real}) = build_gp(ParameterHandling.value(unflatten(θ)))
 build_gp(θ::NamedTuple) = GP(θ.scale * AbstractGPs.transform(SEKernel(), θ.stretch))
@@ -61,10 +61,13 @@ build_gp(θ::NamedTuple) = GP(θ.scale * AbstractGPs.transform(SEKernel(), θ.st
 function make_integrand(y)
     return f -> logpdf(Bernoulli(logistic(f)), y)
 end
-integrands = map(make_integrand, y_tr)
+integrands = map(make_integrand, y_tr);
 
 # Specify the reconstruction term.
 r(m̃, σ̃²) = sum(batch_quadrature(integrands, m̃, sqrt.(σ̃²), 10))
+
+__η1 = zeros(length(x_tr));
+__η2 = -ones(length(x_tr));
 
 function objective(θ::AbstractVector{<:Real})
 
@@ -74,11 +77,11 @@ function objective(θ::AbstractVector{<:Real})
     # Optimise the approximate posterior. Drop the gradient because we're differentiating
     # through the optimum.
     η1_opt, η2_opt = Zygote.ignore() do
-        η1_0 = randn(length(x_tr))
-        η2_0 = -rand(length(x_tr)) .- 1
         η1, η2, iters, delta = optimise_approx_posterior(
-            f, x_tr, η1_0, η2_0, r, 1 - 1e-6; tol=1e-8, max_iterations=1_000,
+            f, x_tr, __η1, __η2, r, 1; tol=1e-4,
         )
+        __η1 .= η1
+        __η2 .= η2
         println((iters, delta))
         return η1, η2
     end
@@ -107,11 +110,11 @@ training_results = Optim.optimize(
     inplace=false,
 )
 
-f = build_gp(training_results.minimizer)
-η1_0 = randn(length(x_tr))
-η2_0 = -rand(length(x_tr)) .- 1
+θ_opt = ParameterHandling.value(unflatten(training_results.minimizer))
+
+f = build_gp(θ_opt)
 η1, η2, iters, delta = optimise_approx_posterior(
-    f, x_tr, η1_0, η2_0, r, 1 - 1e-6; tol=1e-12,
+    f, x_tr, __η1, __η2, r, 1; tol=1e-4,
 )
 
 function latent_marginals(x::AbstractVector)
