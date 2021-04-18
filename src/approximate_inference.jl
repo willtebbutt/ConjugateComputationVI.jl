@@ -60,11 +60,10 @@ function update_approx_posterior(
     (ρ > 1 || ρ <= 0) && throw(error("Bad step size"))
 
     # Compute the approximate posterior.
-    f_post_approx = approx_posterior(f, x, η1, η2)
-    m, v = mean_and_var(f_post_approx(x))
+    mq, σ²q = mean_and_var(approx_posterior(f, x, η1, η2)(x))
 
     # Compute both of the expectation parameters.
-    m1, m2 = expectation_from_canonical(m, v)
+    m1, m2 = expectation_from_canonical(mq, σ²q)
 
     # Compute the gradient w.r.t. both of the expectation parameters. This is equivalent to
     # the natural gradient w.r.t. the natural parameters.
@@ -112,6 +111,56 @@ function optimise_approx_posterior(
 end
 
 """
+
+"""
+function optimize_elbo(build_gp, x, r, θ0::AbstractVector{<:Real}, optimiser, options)
+
+    __η1 = zeros(length(x))
+    __η2 = -ones(length(x))
+
+    function objective(θ::AbstractVector{<:Real})
+
+        # Unflatten θ and build the model at the current hyperparameters.
+        f = build_gp(θ)
+
+        # Optimise the approximate posterior. Drop the gradient because we're differentiating
+        # through the optimum.
+        η1_opt, η2_opt = Zygote.ignore() do
+            η1, η2, iters, delta = optimise_approx_posterior(
+                f, x, __η1, __η2, r, 1; tol=1e-4,
+            )
+            __η1 .= η1
+            __η2 .= η2
+            println((iters, delta))
+            return η1, η2
+        end
+
+        # Compute the negation of the elbo.
+        return -elbo(f, x, η1_opt, η2_opt, r)
+    end
+
+    training_results = Optim.optimize(
+        objective, θ -> only(Zygote.gradient(objective, θ)), θ0, optimiser, options;
+        inplace=false,
+    )
+
+    f = build_gp(training_results.minimizer)
+    η1, η2, iters, delta = optimise_approx_posterior(f, x, __η1, __η2, r, 1; tol=1e-4)
+    approx_post = approx_posterior(f, x, η1, η2)
+
+    results_summary = (
+        training_results=training_results,
+        η1=__η1,
+        η2=__η2,
+        iters=iters,
+        delta=delta,
+    )
+
+    return approx_post, results_summary
+end
+
+
+"""
     elbo(
         f::AbstractGP,
         x::AbstractVector,
@@ -128,10 +177,6 @@ function AbstractGPs.elbo(
     r,
 )
     ỹ, σ̃² = canonical_from_natural(η1, η2)
-
-    # Compute reconstruction term under Gaussian pseudo-likelihood.
-    approx_post_marginals = marginals(approx_posterior(f, x, η1, η2)(x))
-    mq = mean.(approx_post_marginals)
-    σ²q = var.(approx_post_marginals)
+    mq, σ²q = mean_and_var(approx_posterior(f, x, η1, η2)(x))
     return logpdf(f(x, σ̃²), ỹ) + r(mq, σ²q) - gaussian_reconstruction_term(ỹ, σ̃², mq, σ²q)
 end

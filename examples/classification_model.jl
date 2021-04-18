@@ -66,37 +66,10 @@ integrands = map(make_integrand, y_tr);
 # Specify the reconstruction term.
 r(m̃, σ̃²) = sum(batch_quadrature(integrands, m̃, sqrt.(σ̃²), 10))
 
-__η1 = zeros(length(x_tr));
-__η2 = -ones(length(x_tr));
-
-function objective(θ::AbstractVector{<:Real})
-
-    # Unflatten θ and build the model at the current hyperparameters.
-    f = build_gp(θ)
-
-    # Optimise the approximate posterior. Drop the gradient because we're differentiating
-    # through the optimum.
-    η1_opt, η2_opt = Zygote.ignore() do
-        η1, η2, iters, delta = optimise_approx_posterior(
-            f, x_tr, __η1, __η2, r, 1; tol=1e-4,
-        )
-        __η1 .= η1
-        __η2 .= η2
-        println((iters, delta))
-        return η1, η2
-    end
-
-    # Compute the negation of the elbo.
-    return -elbo(f, x_tr, η1_opt, η2_opt, r)
-end
-
-objective(θ_init_flat)
-Zygote.gradient(objective, θ_init_flat)
-
-# Optimise the ELBO using Optim.
-training_results = Optim.optimize(
-    objective,
-    θ -> only(Zygote.gradient(objective, θ)),
+f_approx_post, results_summary = ConjugateComputationVI.optimize_elbo(
+    build_gp,
+    x_tr,
+    r,
     θ_init_flat,
     BFGS(
         alphaguess = Optim.LineSearches.InitialStatic(scaled=true),
@@ -106,19 +79,11 @@ training_results = Optim.optimize(
         show_trace = true,
         iterations=25,
         f_calls_limit=50,
-    );
-    inplace=false,
-)
-
-θ_opt = ParameterHandling.value(unflatten(training_results.minimizer))
-
-f = build_gp(θ_opt)
-η1, η2, iters, delta = optimise_approx_posterior(
-    f, x_tr, __η1, __η2, r, 1; tol=1e-4,
-)
+    ),
+);
 
 function latent_marginals(x::AbstractVector)
-    return marginals(approx_posterior(f, x_tr, η1, η2)(x))
+    return marginals(f_approx_post(x))
 end
 
 function post_mean_prediction(x::AbstractVector)
