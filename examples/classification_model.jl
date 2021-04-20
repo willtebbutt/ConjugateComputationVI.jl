@@ -47,10 +47,7 @@ x_te = x[test_indices];
 y_tr = y[train_indices];
 y_te = y[test_indices];
 
-θ_init = (
-    scale=fixed(1.0),
-    stretch=positive.(ones(2)),
-);
+θ_init = (scale=fixed(1.0), stretch=positive.(ones(2)));
 
 θ_init_flat, unflatten = ParameterHandling.flatten(θ_init);
 
@@ -82,15 +79,10 @@ f_approx_post, results_summary = ConjugateComputationVI.optimize_elbo(
     ),
 );
 
-function latent_marginals(x::AbstractVector)
-    return marginals(f_approx_post(x))
-end
-
 function post_mean_prediction(x::AbstractVector)
-    ms = latent_marginals(x)
-    conditionals = fill(f -> pdf(Bernoulli(logistic(f)), 1), length(ms))
-    posterior_mean_predictions = batch_quadrature(conditionals, mean.(ms), std.(ms), 25)
-    return posterior_mean_predictions
+    m, v = mean_and_var(f_approx_post(x))
+    conditionals = fill(f -> pdf(Bernoulli(logistic(f)), 1), eachindex(m))
+    return batch_quadrature(conditionals, m, sqrt.(v), 25)
 end
 
 # Compute predictions using the optimal hyperparameters.
@@ -116,23 +108,35 @@ x_pr = ColVecs(X_pr);
 
 # Plot classification.
 MAP_pr = MAP_predict(x_pr);
-p1 = heatmap(x1_range, x2_range, reshape(MAP_pr, length(x2_range), length(x1_range))'; label="classifier");
+p1 = heatmap(
+    x1_range, x2_range, reshape(MAP_pr, length(x2_range), length(x1_range))';
+    label="classifier",
+);
 scatter!(p1, setosa.SepalLength, setosa.SepalWidth; label="");
 scatter!(p1, virginica.SepalLength, virginica.SepalWidth; label="");
 
 # Plot posterior mean prob.
 post_mean_pr = post_mean_prediction(x_pr);
-p2 = heatmap(x1_range, x2_range, reshape(post_mean_pr, length(x2_range), length(x1_range))'; label="prob");
+p2 = heatmap(
+    x1_range, x2_range, reshape(post_mean_pr, length(x2_range), length(x1_range))';
+    label="prob",
+);
 scatter!(p2, setosa.SepalLength, setosa.SepalWidth; label="");
 scatter!(p2, virginica.SepalLength, virginica.SepalWidth; label="");
 
 # Plot posterior marginals.
-ms = latent_marginals(x_pr);
-p3 = heatmap(x1_range, x2_range, reshape(mean.(ms), length(x2_range), length(x1_range))'; label="latent mean");
+ms = marginals(f_approx_post(x_pr));
+p3 = heatmap(
+    x1_range, x2_range, reshape(mean.(ms), length(x2_range), length(x1_range))';
+    label="latent mean",
+);
 scatter!(p3, setosa.SepalLength, setosa.SepalWidth; label="");
 scatter!(p3, virginica.SepalLength, virginica.SepalWidth; label="");
 
-p4 = heatmap(x1_range, x2_range, reshape(std.(ms), length(x2_range), length(x1_range))'; label="latent std");
+p4 = heatmap(
+    x1_range, x2_range, reshape(std.(ms), length(x2_range), length(x1_range))';
+    label="latent std",
+);
 scatter!(p4, setosa.SepalLength, setosa.SepalWidth; label="");
 scatter!(p4, virginica.SepalLength, virginica.SepalWidth; label="");
 

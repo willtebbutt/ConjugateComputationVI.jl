@@ -27,13 +27,6 @@ Zygote.@adjoint function StatsFuns.poislogpdf(λ::Float64, x::Union{Float64, Int
     return StatsFuns.poislogpdf(λ, x), poislogpdf_pullback
 end
 
-# # Check correctness.
-# mypoislogpdf(λ, x) = x * log(λ) - λ - log(factorial(x))
-# logpdf(Poisson(3.0), 2)
-# mypoislogpdf(3.0, 2)
-# Zygote.gradient(mypoislogpdf, 3.0, 2)
-# Zygote.gradient((λ, x) -> logpdf(Poisson(λ), x), 3.0, 2)
-
 # Download the data.
 data = dataset("boot", "coal")
 
@@ -45,60 +38,21 @@ x = collect(only(h.edges)[1:end-1])
 y = h.weights
 
 # Specify a model.
-θ_init = (
-    scale=positive(1.0),
-    stretch=positive(1e-3),
-)
-
+θ_init = (scale=positive(1.0), stretch=positive(1e-3))
 θ_init_flat, unflatten = ParameterHandling.flatten(θ_init)
 
 build_gp(θ::AbstractVector{<:Real}) = build_gp(ParameterHandling.value(unflatten(θ)))
 build_gp(θ::NamedTuple) = GP(θ.scale * AbstractGPs.transform(Matern52Kernel(), θ.stretch))
 
 # Specify reconstruction term.
-function make_integrand(y)
-    return (f -> logpdf(Poisson(exp(f)), y))
-end
+const integrands_ = map(y_ -> (f -> logpdf(Poisson(exp(f)), y_)), y)
+r(m̃, σ̃²) = sum(batch_quadrature(integrands_, m̃, sqrt.(σ̃²), 15))
 
-__η1 = zeros(length(x));
-__η2 = -ones(length(x));
-
-# Specify objective function.
-objective(θ::AbstractVector{<:Real}) = objective(ParameterHandling.value(unflatten(θ)))
-function objective(θ::NamedTuple)
-
-    # Construct the model.
-    f = build_gp(θ)
-    
-    # Construct the reconstruction term.
-    integrands = map(make_integrand, y)
-    r(m̃, σ̃²) = sum(batch_quadrature(integrands, m̃, sqrt.(σ̃²), 15))
-
-    # Optimise the approximate posterior. Drop the gradient because we're differentiating
-    # through the optimum.
-    η1_opt, η2_opt = Zygote.ignore() do
-        η1, η2, iters, delta = optimise_approx_posterior(
-            f, x, __η1, __η2, r, 1; tol=1e-4,
-        )
-        __η1 .= η1
-        __η2 .= η2
-        println((iters, delta))
-        return η1, η2
-    end
-
-    # Compute the negative elbo.
-    return -elbo(f, x, η1_opt, η2_opt, r)
-end
-
-objective(θ_init_flat)
-
-Zygote.gradient(objective, θ_init_flat)
-
-# Learn from a different initialisation.
-training_results = Optim.optimize(
-    objective,
-    θ -> only(Zygote.gradient(objective, θ)),
-    θ_init_flat + randn(length(θ_init_flat)),
+f_approx_post, results_summary = ConjugateComputationVI.optimize_elbo(
+    build_gp,
+    x,
+    r,
+    θ_init_flat,
     BFGS(
         alphaguess = Optim.LineSearches.InitialStatic(scaled=true),
         linesearch = Optim.LineSearches.BackTracking(),
@@ -107,31 +61,11 @@ training_results = Optim.optimize(
         show_trace = true,
         iterations=25,
         f_calls_limit=50,
-    );
-    inplace=false,
-)
-
-θ_opt = ParameterHandling.value(unflatten(training_results.minimizer))
-f = build_gp(θ_opt)
-
-# f = build_gp(θ_init_flat)
-integrands = map(make_integrand, y)
-r(m̃, σ̃²) = sum(batch_quadrature(integrands, m̃, sqrt.(σ̃²), 15))
-
-η1, η2, iters, delta = optimise_approx_posterior(
-    f, x, __η1, __η2, r, 1; tol=1e-4,
-)
-
-# Make predictions for the observations and the latent function.
-function latent_marginals(x::AbstractVector)
-    return marginals(approx_posterior(f, x, η1, η2)(x, 1e-6))
-end
+    ),
+);
 
 function approx_post_marginal_samples(x::AbstractVector, N::Int)
-    ms = latent_marginals(x)
-
-    # Generate N samples for each element.
-    return map(latent_marginals(x)) do latent_marginal
+    return map(marginals(f_approx_post(x))) do latent_marginal
         f = rand(latent_marginal, N)
         return exp.(f) / (x[2] - x[1])
     end
@@ -150,12 +84,11 @@ p1 = plot(
     fillrange=getindex.(qs, 3),
     label="95% CI",
     fillalpha=0.3,
+    color=:blue,
 );
 scatter!(p1, x, y; markersize=2, label="Observations");
 
-p2 = plot(approx_posterior(f, x, η1, η2)(x, 1e-6); label="approx posterior latent");
-sampleplot!(approx_posterior(f, x, η1, η2)(x, 1e-6), 10);
+p2 = plot(f_approx_post(x, 1e-6); ribbon_scale=3, color=:blue, label="approx post latent");
+sampleplot!(f_approx_post(x, 1e-6), 10; color=:blue);
 
 plot(p1, p2; layout=(2, 1))
-
-# Look at the callibration.
