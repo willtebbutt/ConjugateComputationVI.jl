@@ -52,7 +52,7 @@ f_approx_post, results_summary = ConjugateComputationVI.optimize_elbo(
     GaussHermiteQuadrature(10),
     x,
     y,
-    θ_init_flat,# + randn(length(θ_init_flat)),
+    θ_init_flat + randn(length(θ_init_flat)),
     BFGS(
         alphaguess = Optim.LineSearches.InitialStatic(scaled=true),
         linesearch = Optim.LineSearches.BackTracking(),
