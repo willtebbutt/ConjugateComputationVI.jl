@@ -116,6 +116,30 @@ function optimise_approx_posterior(
     return η1, η2, iteration, delta_norm
 end
 
+"""
+    elbo(
+        f::AbstractGP,
+        x::AbstractVector,
+        η1::AbstractVector{<:Real},
+        η2::AbstractVector{<:Real},
+        r,
+    )
+
+Compute the evidence lower bound associated with the GP `f`, with reconstruction term `r`,
+variational parameters `η1` and `η2`, and collection of inputs `x`.
+"""
+function AbstractGPs.elbo(
+    f::AbstractGP,
+    x::AbstractVector,
+    η1::AbstractVector{<:Real},
+    η2::AbstractVector{<:Real},
+    r,
+)
+    ỹ, σ̃² = canonical_from_natural(η1, η2)
+    mq, σ²q = mean_and_var(approx_posterior(f, x, η1, η2)(x))
+    return logpdf(f(x, σ̃²), ỹ) + r(mq, σ²q) - gaussian_reconstruction_term(ỹ, σ̃², mq, σ²q)
+end
+
 
 
 abstract type AbstractIntegrater end
@@ -160,7 +184,6 @@ function build_integrands(
     lik = latent_gp.lik.build_lik
     return map(y_ -> (f -> logpdf(lik(f), y_)), y)
 end
-
 
 """
     optimize_elbo(
@@ -244,29 +267,4 @@ function optimize_elbo(
     )
 
     return approx_post, results_summary
-end
-
-
-"""
-    elbo(
-        f::AbstractGP,
-        x::AbstractVector,
-        η1::AbstractVector{<:Real},
-        η2::AbstractVector{<:Real},
-        r,
-    )
-
-Compute the evidence lower bound associated with the GP `f`, with reconstruction term `r`,
-variational parameters `η1` and `η2`, and collection of inputs `x`.
-"""
-function AbstractGPs.elbo(
-    f::AbstractGP,
-    x::AbstractVector,
-    η1::AbstractVector{<:Real},
-    η2::AbstractVector{<:Real},
-    r,
-)
-    ỹ, σ̃² = canonical_from_natural(η1, η2)
-    mq, σ²q = mean_and_var(approx_posterior(f, x, η1, η2)(x))
-    return logpdf(f(x, σ̃²), ỹ) + r(mq, σ²q) - gaussian_reconstruction_term(ỹ, σ̃², mq, σ²q)
 end
