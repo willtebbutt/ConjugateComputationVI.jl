@@ -166,7 +166,9 @@ struct UnivariateFactorisedLikelihood{Tf}
     build_lik::Tf
 end
 
-(l::UnivariateFactorisedLikelihood)(x::AbstractVector{<:Real}) = Product(map(l.f, x))
+function (l::UnivariateFactorisedLikelihood)(x::AbstractVector{<:Real})
+    return Product(map(l.build_lik, x))
+end
 
 function build_reconstruction_term(
     integrater::GaussHermiteQuadrature,
