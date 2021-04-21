@@ -10,48 +10,37 @@ using StatsFuns
 using Zygote
 
 using ConjugateComputationVI:
-    approx_posterior,
-    batch_quadrature,
-    elbo,
-    optimise_approx_posterior
+    GaussHermiteQuadrature,
+    UnivariateFactorisedLikelihood
 
 # Specify a model.
 θ_init = (scale=positive(1.9), stretch=positive(0.8), β = fixed(0.3))
 
 θ_init_flat, unflatten = ParameterHandling.flatten(θ_init)
 
-build_gp(θ::AbstractVector{<:Real}) = build_gp(ParameterHandling.value(unflatten(θ)))
-build_gp(θ::NamedTuple) = GP(θ.scale * AbstractGPs.transform(SEKernel(), θ.stretch))
-
-function build_conditionals(θ::NamedTuple, N::Int)
-    return fill(f -> Exponential(exp(f)), N)
-end
-
 x = range(-5.0, 5.0; length=100);
 x_tr = x
 θ_init_val = ParameterHandling.value(θ_init)
-f = build_gp(θ_init_val)
+
+function build_latent_gp(θ::AbstractVector{<:Real})
+    return build_latent_gp(ParameterHandling.value(unflatten(θ)))
+end
+function build_latent_gp(θ::NamedTuple)
+    gp = GP(θ.scale * AbstractGPs.transform(SEKernel(), θ.stretch))
+    lik = UnivariateFactorisedLikelihood(f -> Exponential(exp(f)))
+    return LatentGP(gp, lik, 1e-9)
+end
 
 # Generate some synthetic data.
-y_tr = map(
-    (f, conditional) -> rand(conditional(f)),
-    rand(f(x, 1e-6)),
-    build_conditionals(θ_init_val, length(x)),
-)
+y_tr = rand(build_latent_gp(θ_init_val)(x_tr)).y;
 
-# Specify reconstruction term.
-function make_integrand(y)
-    return (f -> logpdf(Exponential(exp(f)), y))
-end
-const integrands = map(make_integrand, y_tr)
-
-r(m̃, σ̃²) = sum(batch_quadrature(integrands, m̃, sqrt.(σ̃²), 10))
-
+# Add some noise to the initialisation to make this more interesting.
 f_approx_post, results_summary = ConjugateComputationVI.optimize_elbo(
-    build_gp,
+    build_latent_gp,
+    GaussHermiteQuadrature(10),
     x_tr,
-    r,
-    θ_init_flat,
+    y_tr,
+    θ_init_flat + randn(length(θ_init_flat)),
     BFGS(
         alphaguess = Optim.LineSearches.InitialStatic(scaled=true),
         linesearch = Optim.LineSearches.BackTracking(),

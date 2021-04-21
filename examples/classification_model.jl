@@ -10,10 +10,12 @@ using StatsFuns
 using Zygote
 
 using ConjugateComputationVI:
-    approx_posterior,
-    batch_quadrature,
-    elbo,
-    optimise_approx_posterior
+    GaussHermiteQuadrature,
+    UnivariateFactorisedLikelihood
+
+
+
+# Prepare data.
 
 # Get the (infamous) Iris dataset, and only keep two labels -- we'll just do binary
 # classification for now.
@@ -47,26 +49,28 @@ x_te = x[test_indices];
 y_tr = y[train_indices];
 y_te = y[test_indices];
 
+
+
+# Specify and perform inference in model.
+
 θ_init = (scale=fixed(1.0), stretch=positive.(ones(2)));
 
 θ_init_flat, unflatten = ParameterHandling.flatten(θ_init);
 
-build_gp(θ::AbstractVector{<:Real}) = build_gp(ParameterHandling.value(unflatten(θ)))
-build_gp(θ::NamedTuple) = GP(θ.scale * AbstractGPs.transform(SEKernel(), θ.stretch))
-
-# Specify reconstruction term.
-function make_integrand(y)
-    return f -> logpdf(Bernoulli(logistic(f)), y)
+function build_latent_gp(θ::AbstractVector{<:Real})
+    return build_latent_gp(ParameterHandling.value(unflatten(θ)))
 end
-integrands = map(make_integrand, y_tr);
-
-# Specify the reconstruction term.
-r(m̃, σ̃²) = sum(batch_quadrature(integrands, m̃, sqrt.(σ̃²), 10))
+function build_latent_gp(θ::NamedTuple)
+    gp = GP(θ.scale * AbstractGPs.transform(SEKernel(), θ.stretch))
+    lik = UnivariateFactorisedLikelihood(f -> Bernoulli(logistic(f)))
+    return LatentGP(gp, lik, 1e-9)
+end
 
 f_approx_post, results_summary = ConjugateComputationVI.optimize_elbo(
-    build_gp,
+    build_latent_gp,
+    GaussHermiteQuadrature(10),
     x_tr,
-    r,
+    y_tr,
     θ_init_flat,
     BFGS(
         alphaguess = Optim.LineSearches.InitialStatic(scaled=true),
@@ -78,6 +82,10 @@ f_approx_post, results_summary = ConjugateComputationVI.optimize_elbo(
         f_calls_limit=50,
     ),
 );
+
+
+
+# Visualise results of model.
 
 function post_mean_prediction(x::AbstractVector)
     m, v = mean_and_var(f_approx_post(x))

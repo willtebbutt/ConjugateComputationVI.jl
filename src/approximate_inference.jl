@@ -110,24 +110,72 @@ function optimise_approx_posterior(
     return η1, η2, iteration, delta_norm
 end
 
+
+
+abstract type AbstractIntegrater end
+
+"""
+    GaussHermiteQuadrature(num_points::Int)
+
+
+"""
+struct GaussHermiteQuadrature <: AbstractIntegrater
+    num_points::Int
+end
+
+# f should be a function which eats an individual `x` and returns a univariate distribution.
+struct UnivariateFactorisedLikelihood{Tf}
+    f::Tf
+end
+
+(l::UnivariateFactorisedLikelihood)(x::AbstractVector) = Product(map(l.f, x))
+
+function build_reconstruction_term(
+    integrater::GaussHermiteQuadrature,
+    latent_gp::LatentGP,
+    y::AbstractVector,
+)
+    integrands = build_integrands(latent_gp, y)
+    return (m̃, σ̃²) -> sum(batch_quadrature(integrands, m̃, sqrt.(σ̃²), integrater.num_points))
+end
+
+function build_integrands(
+    latent_gp::LatentGP{<:AbstractGP, <:UnivariateFactorisedLikelihood},
+    y::AbstractVector,
+)
+    lik = latent_gp.lik.f
+    return map(y_ -> (f -> logpdf(lik(f), y_)), y)
+end
+
+
 """
 
 """
-function optimize_elbo(build_gp, x, r, θ0::AbstractVector{<:Real}, optimiser, options)
-
+function optimize_elbo(
+    build_latent_gp,
+    integrater::AbstractIntegrater,
+    x::AbstractVector,
+    y::AbstractVector,
+    θ0::AbstractVector{<:Real},
+    optimiser,
+    options,
+)
+    # Initialise variational parameters. We'll be mutating these to enable warm-starts
+    # during each outer iteration of the algorithm.
     __η1 = zeros(length(x))
     __η2 = -ones(length(x))
 
     function objective(θ::AbstractVector{<:Real})
 
         # Unflatten θ and build the model at the current hyperparameters.
-        f = build_gp(θ)
+        l = build_latent_gp(θ)
+        r = build_reconstruction_term(integrater, l, y)
 
-        # Optimise the approximate posterior. Drop the gradient because we're differentiating
-        # through the optimum.
+        # Optimise the approximate posterior. Drop the gradient because we're
+        # differentiating through the optimum.
         η1_opt, η2_opt = Zygote.ignore() do
             η1, η2, iters, delta = optimise_approx_posterior(
-                f, x, __η1, __η2, r, 1; tol=1e-4,
+                l.f, x, __η1, __η2, r, 1; tol=1e-4,
             )
             __η1 .= η1
             __η2 .= η2
@@ -136,7 +184,7 @@ function optimize_elbo(build_gp, x, r, θ0::AbstractVector{<:Real}, optimiser, o
         end
 
         # Compute the negation of the elbo.
-        return -elbo(f, x, η1_opt, η2_opt, r)
+        return -elbo(l.f, x, η1_opt, η2_opt, r)
     end
 
     training_results = Optim.optimize(
@@ -144,9 +192,10 @@ function optimize_elbo(build_gp, x, r, θ0::AbstractVector{<:Real}, optimiser, o
         inplace=false,
     )
 
-    f = build_gp(training_results.minimizer)
-    η1, η2, iters, delta = optimise_approx_posterior(f, x, __η1, __η2, r, 1; tol=1e-4)
-    approx_post = approx_posterior(f, x, η1, η2)
+    l = build_latent_gp(training_results.minimizer)
+    r = build_reconstruction_term(integrater, l, y)
+    η1, η2, iters, delta = optimise_approx_posterior(l.f, x, __η1, __η2, r, 1; tol=1e-4)
+    approx_post = approx_posterior(l.f, x, η1, η2)
 
     results_summary = (
         training_results=training_results,

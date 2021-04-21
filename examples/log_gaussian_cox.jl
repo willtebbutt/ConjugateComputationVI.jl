@@ -11,10 +11,8 @@ using StatsFuns
 using Zygote
 
 using ConjugateComputationVI:
-    approx_posterior,
-    batch_quadrature,
-    elbo,
-    optimise_approx_posterior
+    GaussHermiteQuadrature,
+    UnivariateFactorisedLikelihood
 
 # Adjoint for the Poisson logpdf.
 # log(λ^x exp(-λ) / x!) =
@@ -41,17 +39,20 @@ y = h.weights
 θ_init = (scale=positive(1.0), stretch=positive(1e-3))
 θ_init_flat, unflatten = ParameterHandling.flatten(θ_init)
 
-build_gp(θ::AbstractVector{<:Real}) = build_gp(ParameterHandling.value(unflatten(θ)))
-build_gp(θ::NamedTuple) = GP(θ.scale * AbstractGPs.transform(Matern52Kernel(), θ.stretch))
-
-# Specify reconstruction term.
-const integrands_ = map(y_ -> (f -> logpdf(Poisson(exp(f)), y_)), y)
-r(m̃, σ̃²) = sum(batch_quadrature(integrands_, m̃, sqrt.(σ̃²), 15))
+function build_latent_gp(θ::AbstractVector{<:Real})
+    return build_latent_gp(ParameterHandling.value(unflatten(θ)))
+end
+function build_latent_gp(θ::NamedTuple)
+    gp = GP(θ.scale * AbstractGPs.transform(SEKernel(), θ.stretch))
+    lik = UnivariateFactorisedLikelihood(f -> Poisson(exp(f)))
+    return LatentGP(gp, lik, 1e-9)
+end
 
 f_approx_post, results_summary = ConjugateComputationVI.optimize_elbo(
-    build_gp,
+    build_latent_gp,
+    GaussHermiteQuadrature(10),
     x,
-    r,
+    y,
     θ_init_flat,
     BFGS(
         alphaguess = Optim.LineSearches.InitialStatic(scaled=true),

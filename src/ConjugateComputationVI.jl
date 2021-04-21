@@ -7,7 +7,7 @@ using LinearAlgebra
 using Optim
 using Zygote
 
-using AbstractGPs: AbstractGP
+using AbstractGPs: AbstractGP, LatentFiniteGP
 
 include("quadrature.jl")
 include("parametrisation_bijections.jl")
