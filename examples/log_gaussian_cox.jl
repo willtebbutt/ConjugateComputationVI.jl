@@ -10,9 +10,7 @@ using StatsBase
 using StatsFuns
 using Zygote
 
-using ConjugateComputationVI:
-    GaussHermiteQuadrature,
-    UnivariateFactorisedLikelihood
+using ConjugateComputationVI: GaussHermiteQuadrature, UnivariateFactorisedLikelihood
 
 # Adjoint for the Poisson logpdf.
 # log(λ^x exp(-λ) / x!) =

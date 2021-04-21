@@ -9,9 +9,7 @@ using RDatasets
 using StatsFuns
 using Zygote
 
-using ConjugateComputationVI:
-    GaussHermiteQuadrature,
-    UnivariateFactorisedLikelihood
+using ConjugateComputationVI: GaussHermiteQuadrature, UnivariateFactorisedLikelihood
 
 
 

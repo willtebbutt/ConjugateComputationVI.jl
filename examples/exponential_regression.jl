@@ -9,9 +9,7 @@ using RDatasets
 using StatsFuns
 using Zygote
 
-using ConjugateComputationVI:
-    GaussHermiteQuadrature,
-    UnivariateFactorisedLikelihood
+using ConjugateComputationVI: GaussHermiteQuadrature, UnivariateFactorisedLikelihood
 
 # Specify a model.
 θ_init = (scale=positive(1.9), stretch=positive(0.8), β = fixed(0.3))
