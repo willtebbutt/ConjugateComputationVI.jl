@@ -1,4 +1,17 @@
-# I generally expect that num_points is quite small, but length(fs) could be quite large.
+"""
+    batch_quadrature(
+        fs::AbstractVector,
+        ms::AbstractVector{<:Real},
+        σs::AbstractVector{<:Real},
+        num_points::Integer,
+    )
+
+Approximate the integrals
+```julia
+∫ fs[n](x) pdf(Normal(ms[n], σs[n]), x) dx
+```
+for all `n` in `eachindex(fs)` using Gauss-Hermite quadrature with `num_points`.
+"""
 function batch_quadrature(
     fs::AbstractVector,
     ms::AbstractVector{<:Real},

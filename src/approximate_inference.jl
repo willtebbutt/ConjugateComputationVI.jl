@@ -5,6 +5,12 @@
         m̃::AbstractVector{<:Real},
         σ̃²::AbstractVector{<:Real},
     )
+
+Computes
+```julia
+∫ logpdf(Normal(f, σ²[n]), y[n]) pdf(Normal(m̃[n], σ̃²[n]), f) df
+```
+for each `n ∈ eachindex(y)`.
 """
 function gaussian_reconstruction_term(
     y::AbstractVector{<:Real},
@@ -117,18 +123,26 @@ abstract type AbstractIntegrater end
 """
     GaussHermiteQuadrature(num_points::Int)
 
-
+Specify that the expectation required for the reconstruction term is to be computed using
+Gauss-Hermite quadrature with `num_points` quadrature points. 
 """
 struct GaussHermiteQuadrature <: AbstractIntegrater
     num_points::Int
 end
 
-# f should be a function which eats an individual `x` and returns a univariate distribution.
+"""
+    UnivariateFactorisedLikelihood(build_lik)
+
+A likelihood function which factorises across inputs.
+Applying this likelihood to any vector `f::AbstractVector{<:Real}` yields a `Product`
+distribution.
+Exposing this structure is useful when working with quadrature methods.
+"""
 struct UnivariateFactorisedLikelihood{Tf}
-    f::Tf
+    build_lik::Tf
 end
 
-(l::UnivariateFactorisedLikelihood)(x::AbstractVector) = Product(map(l.f, x))
+(l::UnivariateFactorisedLikelihood)(x::AbstractVector{<:Real}) = Product(map(l.f, x))
 
 function build_reconstruction_term(
     integrater::GaussHermiteQuadrature,
@@ -143,13 +157,37 @@ function build_integrands(
     latent_gp::LatentGP{<:AbstractGP, <:UnivariateFactorisedLikelihood},
     y::AbstractVector,
 )
-    lik = latent_gp.lik.f
+    lik = latent_gp.lik.build_lik
     return map(y_ -> (f -> logpdf(lik(f), y_)), y)
 end
 
 
 """
+    optimize_elbo(
+        build_latent_gp,
+        integrater::AbstractIntegrater,
+        x::AbstractVector,
+        y::AbstractVector,
+        θ0::AbstractVector{<:Real},
+        optimiser,
+        options,
+    )
 
+Optimise the elbo w.r.t. model parameters.
+
+# Arguments
+- `build_latent_gp`: a unary function accepting an `AbstractVector{<:Real}` returning a
+    LatentGP
+- `integrater`::AbstractIntegrater: an object specifying how to perform inference
+- `x::AbstractVector`: a collection of inputs
+- `y::AbstractVector`: a collection of outputs
+- `θ0::AbstractVector{<:Real}`: initial model parameter values
+- `optimiser`: an optimiser that can be passed to `Optim.optimize`
+- `options`: options to be passed to `Optim.optimize`
+
+# Returns
+- `AbstractGP`: the approximate posterior at the optimum
+- `NamedTuple`: results summary containing various useful bits of information
 """
 function optimize_elbo(
     build_latent_gp,
@@ -217,6 +255,9 @@ end
         η2::AbstractVector{<:Real},
         r,
     )
+
+Compute the evidence lower bound associated with the GP `f`, with reconstruction term `r`,
+variational parameters `η1` and `η2`, and collection of inputs `x`.
 """
 function AbstractGPs.elbo(
     f::AbstractGP,
