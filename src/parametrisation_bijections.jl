@@ -39,3 +39,21 @@ Inverse of [`expectation_from_canonical`](@ref).
 function canonical_from_expectation(m1::AbstractVector{<:Real}, m2::AbstractVector{<:Real})
     return m1, m2 .- m1.^2
 end
+
+function Zygote._pullback(
+    ::Zygote.AContext,
+    ::typeof(canonical_from_expectation),
+    m1::AbstractVector{<:Real},
+    m2::AbstractVector{<:Real},
+)
+    function canonical_from_expectation_pullback(Δ)
+        Δ === nothing && return nothing
+        Δm = Δ[1]
+        Δσ² = Δ[2]
+
+        Δm1 = Δm .- 2 .* Δσ² .* m1
+        Δm2 = Δσ²
+        return (nothing, Δm1, Δm2)
+    end
+    return canonical_from_expectation(m1, m2), canonical_from_expectation_pullback
+end
