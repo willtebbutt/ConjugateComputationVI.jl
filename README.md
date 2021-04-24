@@ -20,6 +20,9 @@ specifying this model when provided with kernel parameters.
 the book-keeping associated with the model parameters.
 
 ```julia
+using Pkg
+Pkg.activate("examples")
+
 using AbstractGPs
 using ConjugateComputationVI
 using Distributions
