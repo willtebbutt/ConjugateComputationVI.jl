@@ -66,7 +66,7 @@ f_approx_post, results_summary = ConjugateComputationVI.optimize_elbo(
 function approx_post_marginal_samples(x::AbstractVector, N::Int)
     return map(marginals(f_approx_post(x))) do latent_marginal
         f = rand(latent_marginal, N)
-        return exp.(f) / (x[2] - x[1])
+        return exp.(f)
     end
 end
 
