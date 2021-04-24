@@ -1,6 +1,7 @@
 using AbstractGPs
 using ConjugateComputationVI
 using Distributions
+using FiniteDifferences
 using KernelFunctions
 using Random
 using StatsFuns

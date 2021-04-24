@@ -1,3 +1,28 @@
+struct SimpleNormal{Tm, Tσ} <: Distributions.ContinuousUnivariateDistribution
+    m::Tm
+    σ::Tσ
+end
+
+function Distributions.logpdf(d::SimpleNormal, y::Real)
+    m = Zygote.literal_getfield(d, Val(:m))
+    σ = Zygote.literal_getfield(d, Val(:σ))
+    return -(log(2π) + 2log(σ) + ((y - m) / σ)^2) / 2
+end
+
+function ChainRulesCore.rrule(::typeof(AbstractGPs.mean), d::T) where {T<:Normal}
+    function mean_pullback(Δ::Real)
+        return NO_FIELDS, Composite{T}(μ=Δ)
+    end
+    return d.μ, mean_pullback
+end
+
+function ChainRulesCore.rrule(::typeof(AbstractGPs.var), d::T) where {T<:Normal}
+    function var_pullback(Δ::Real)
+        NO_FIELDS, Composite{T}(σ=2Δ * d.σ)
+    end
+    return d.σ^2, var_pullback
+end
+
 """
     gaussian_reconstruction_term(
         y::AbstractVector{<:Real},
@@ -19,7 +44,7 @@ function gaussian_reconstruction_term(
     σ̃²::AbstractVector{<:Real},
 )
     return sum(
-        map((y, σ², m̃, σ̃²) -> logpdf(Normal(m̃, sqrt(σ²)), y) - σ̃² / (2σ²), y, σ², m̃, σ̃²),
+        map((y, σ², m̃, σ̃²) -> logpdf(SimpleNormal(m̃, sqrt(σ²)), y) - σ̃² / (2σ²), y, σ², m̃, σ̃²),
     )
 end
 
@@ -73,7 +98,13 @@ function update_approx_posterior(
 
     # Compute the gradient w.r.t. both of the expectation parameters. This is equivalent to
     # the natural gradient w.r.t. the natural parameters.
-    g1, g2 = Zygote.gradient((m1, m2) -> r(canonical_from_expectation(m1, m2)...), m1, m2)
+    g1, g2 = Zygote.gradient(
+        (m1, m2) -> begin
+            y, σ² = canonical_from_expectation(m1, m2)
+            return r(y, σ²)
+        end,
+        m1, m2,
+    )
 
     # Perform a step of NGA in the first natural pseudo-observation vector.
     η1_new = (1 - ρ) .* η1 .+ ρ .* g1
@@ -176,7 +207,7 @@ function build_reconstruction_term(
     y::AbstractVector,
 )
     integrands = build_integrands(latent_gp, y)
-    return (m̃, σ̃²) -> sum(batch_quadrature(integrands, m̃, sqrt.(σ̃²), integrater.num_points))
+    return (m̃, σ̃²) -> sum(batch_quadrature(integrands, m̃, map(sqrt, σ̃²), integrater.num_points))
 end
 
 function build_integrands(
@@ -242,7 +273,6 @@ function optimize_elbo(
             )
             __η1 .= η1
             __η2 .= η2
-            println((iters, delta))
             return η1, η2
         end
 

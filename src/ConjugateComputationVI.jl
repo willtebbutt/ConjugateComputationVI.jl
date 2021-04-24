@@ -1,6 +1,7 @@
 module ConjugateComputationVI
 
 using AbstractGPs
+using ChainRulesCore
 using Distributions
 using FastGaussQuadrature
 using LinearAlgebra
