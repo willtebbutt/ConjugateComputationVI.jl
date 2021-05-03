@@ -1,9 +1,9 @@
-struct SimpleNormal{Tm, Tσ} <: Distributions.ContinuousUnivariateDistribution
+struct SimpleNormal{Tm, Tσ}
     m::Tm
     σ::Tσ
 end
 
-function Distributions.logpdf(d::SimpleNormal, y::Real)
+function AbstractGPs.logpdf(d::SimpleNormal, y::Real)
     m = Zygote.literal_getfield(d, Val(:m))
     σ = Zygote.literal_getfield(d, Val(:σ))
     return -(log(2π) + 2log(σ) + ((y - m) / σ)^2) / 2
