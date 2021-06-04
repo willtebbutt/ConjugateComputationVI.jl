@@ -11,14 +11,14 @@ end
 
 function ChainRulesCore.rrule(::typeof(AbstractGPs.mean), d::T) where {T<:Normal}
     function mean_pullback(Δ::Real)
-        return NO_FIELDS, Composite{T}(μ=Δ)
+        return NoTangent, Tangent{T}(μ=Δ)
     end
     return d.μ, mean_pullback
 end
 
 function ChainRulesCore.rrule(::typeof(AbstractGPs.var), d::T) where {T<:Normal}
     function var_pullback(Δ::Real)
-        NO_FIELDS, Composite{T}(σ=2Δ * d.σ)
+        NoTangent, Tangent{T}(σ=2Δ * d.σ)
     end
     return d.σ^2, var_pullback
 end
