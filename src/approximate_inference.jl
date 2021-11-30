@@ -43,8 +43,20 @@ function gaussian_reconstruction_term(
     m̃::AbstractVector{<:Real},
     σ̃²::AbstractVector{<:Real},
 )
+    return gaussian_reconstruction_term(y, Diagonal(σ²), m̃, Diagonal(σ̃²))
+end
+
+function gaussian_reconstruction_term(
+    y::AbstractVector{<:Real},
+    Σy::Diagonal{<:Real},
+    mq::AbstractVector{<:Real},
+    Σq::Diagonal{<:Real},
+)
     return sum(
-        map((y, σ², m̃, σ̃²) -> logpdf(SimpleNormal(m̃, sqrt(σ²)), y) - σ̃² / (2σ²), y, σ², m̃, σ̃²),
+        map(
+            (y, σ², m̃, σ̃²) -> logpdf(SimpleNormal(m̃, sqrt(σ²)), y) - σ̃² / (2σ²),
+            y, Σy.diag, mq, Σq.diag,
+        ),
     )
 end
 
