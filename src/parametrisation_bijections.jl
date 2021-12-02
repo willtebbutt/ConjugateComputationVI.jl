@@ -9,11 +9,6 @@ function natural_from_canonical(y::AbstractVector{<:Real}, σ²::AbstractVector{
     return η1, η2.diag
 end
 
-# function natural_from_canonical(y::AbstractVector{<:Real}, Σ::AbstractMatrix{<:Real})
-#     C = cholesky(Σ)
-#     return C \ y, -inv(C) / 2
-# end
-
 function natural_from_canonical(y::AbstractVector{<:Real}, Σ::Diagonal{<:Real})
     return Σ \ y, -inv(Σ) / 2
 end
@@ -64,21 +59,3 @@ end
 function canonical_from_expectation(m1::AbstractVector{<:Real}, M2::Diagonal{<:Real})
     return m1, Diagonal(diag(M2) .- m1.^2)
 end
-
-# function Zygote._pullback(
-#     ::Zygote.AContext,
-#     ::typeof(canonical_from_expectation),
-#     m1::AbstractVector{<:Real},
-#     m2::AbstractVector{<:Real},
-# )
-#     function canonical_from_expectation_pullback(Δ)
-#         Δ === nothing && return nothing
-#         Δm = Δ[1]
-#         Δσ² = Δ[2]
-
-#         Δm1 = Δm .- 2 .* Δσ² .* m1
-#         Δm2 = Δσ²
-#         return (nothing, Δm1, Δm2)
-#     end
-#     return canonical_from_expectation(m1, m2), canonical_from_expectation_pullback
-# end
