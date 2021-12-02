@@ -39,15 +39,6 @@ for each `n ∈ eachindex(y)`.
 """
 function gaussian_reconstruction_term(
     y::AbstractVector{<:Real},
-    σ²::AbstractVector{<:Real},
-    m̃::AbstractVector{<:Real},
-    σ̃²::AbstractVector{<:Real},
-)
-    return gaussian_reconstruction_term(y, Diagonal(σ²), m̃, Diagonal(σ̃²))
-end
-
-function gaussian_reconstruction_term(
-    y::AbstractVector{<:Real},
     Σy::Diagonal{<:Real},
     mq::AbstractVector{<:Real},
     Σq::Diagonal{<:Real},
@@ -55,10 +46,19 @@ function gaussian_reconstruction_term(
     return sum(
         map(
             (y, σ², m̃, σ̃²) -> logpdf(SimpleNormal(m̃, sqrt(σ²)), y) - σ̃² / (2σ²),
-            y, Σy.diag, mq, Σq.diag,
+            y, diag(Σy), mq, diag(Σq),
         ),
     )
 end
+
+# function gaussian_reconstruction_term(
+#     y::AbstractVector{<:Real},
+#     σ²::AbstractVector{<:Real},
+#     m̃::AbstractVector{<:Real},
+#     σ̃²::AbstractVector{<:Real},
+# )
+#     return gaussian_reconstruction_term(y, Diagonal(σ²), m̃, Diagonal(σ̃²))
+# end
 
 """
     approx_posterior(
@@ -75,11 +75,21 @@ function approx_posterior(
     f::AbstractGP,
     x::AbstractVector,
     η1::AbstractVector{<:Real},
-    η2::AbstractVector{<:Real},
+    η2::Diagonal{<:Real},
 )
-    y, σ² = canonical_from_natural(η1, η2)
-    return posterior(f(x, σ² .+ 1e-6), y)
+    y, Σ = canonical_from_natural(η1, η2)
+    return posterior(f(x, Σ + 1e-6 * I), y)
 end
+
+# function approx_posterior(
+#     f::AbstractGP,
+#     x::AbstractVector,
+#     η1::AbstractVector{<:Real},
+#     η2::AbstractMatrix{<:Real},
+# )
+#     y, σ² = canonical_from_natural(η1, η2)
+#     return posterior(f(x, σ² .+ 1e-6), y)
+# end
 
 """
     update_approx_posterior(
@@ -95,18 +105,18 @@ function update_approx_posterior(
     f::AbstractGP,
     x::AbstractVector,
     η1::AbstractVector{<:Real},
-    η2::AbstractVector{<:Real},
+    η2::Diagonal{<:Real},
     r,
     ρ::Real,
 )
     # Check that the step size makes sense.
     (ρ > 1 || ρ <= 0) && throw(error("Bad step size"))
 
-    # Compute the approximate posterior.
+    # Compute the approximate posterior marginals.
     mq, σ²q = mean_and_var(approx_posterior(f, x, η1, η2)(x))
 
     # Compute both of the expectation parameters.
-    m1, m2 = expectation_from_canonical(mq, σ²q)
+    m1, m2 = expectation_from_canonical(mq, Diagonal(σ²q))
 
     # Compute the gradient w.r.t. both of the expectation parameters. This is equivalent to
     # the natural gradient w.r.t. the natural parameters.
@@ -141,7 +151,7 @@ function optimise_approx_posterior(
     f::AbstractGP,
     x::AbstractVector,
     η1::AbstractVector{<:Real},
-    η2::AbstractVector{<:Real},
+    η2::Diagonal{<:Real},
     r,
     ρ::Real;
     max_iterations=1_000,
@@ -175,12 +185,12 @@ function AbstractGPs.elbo(
     f::AbstractGP,
     x::AbstractVector,
     η1::AbstractVector{<:Real},
-    η2::AbstractVector{<:Real},
+    η2::Diagonal{<:Real},
     r,
 )
     ỹ, σ̃² = canonical_from_natural(η1, η2)
     mq, σ²q = mean_and_var(approx_posterior(f, x, η1, η2)(x))
-    return logpdf(f(x, σ̃²), ỹ) + r(mq, σ²q) - gaussian_reconstruction_term(ỹ, σ̃², mq, σ²q)
+    return logpdf(f(x, σ̃²), ỹ) + r(mq, Diagonal(σ²q)) - gaussian_reconstruction_term(ỹ, σ̃², mq, Diagonal(σ²q))
 end
 
 
@@ -210,7 +220,7 @@ struct UnivariateFactorisedLikelihood{Tf}
 end
 
 function (l::UnivariateFactorisedLikelihood)(x::AbstractVector{<:Real})
-    return Product(map(l.build_lik, x))
+    return AbstractGPs.Product(map(l.build_lik, x))
 end
 
 function build_reconstruction_term(
@@ -219,7 +229,10 @@ function build_reconstruction_term(
     y::AbstractVector,
 )
     integrands = build_integrands(latent_gp, y)
-    return (m̃, σ̃²) -> sum(batch_quadrature(integrands, m̃, map(sqrt, σ̃²), integrater.num_points))
+    function reconstruction_term(mq::AbstractVector{<:Real}, Σq::Diagonal{<:Real})
+        return sum(batch_quadrature(integrands, mq, map(sqrt, diag(Σq)), integrater.num_points))
+    end
+    return reconstruction_term
 end
 
 function build_integrands(
@@ -269,7 +282,7 @@ function optimize_elbo(
     # Initialise variational parameters. We'll be mutating these to enable warm-starts
     # during each outer iteration of the algorithm.
     __η1 = zeros(length(x))
-    __η2 = -ones(length(x))
+    __η2 = Diagonal(-ones(length(x)))
 
     function objective(θ::AbstractVector{<:Real})
 

@@ -1,20 +1,20 @@
 @testset "approximate_inference" begin
     @testset "gaussian_reconstruction_term" begin
-        _, _, σ², y = generate_synthetic_problem(MersenneTwister(123456))
-        m̃ = randn(size(y))
-        σ̃² = rand(length(y)) .+ 1
-        gaussian_reconstruction_term(y, σ², m̃, σ̃²)
-        Zygote.gradient(gaussian_reconstruction_term, y, σ², m̃, σ̃²)
+        _, _, Σ, y = generate_synthetic_problem(MersenneTwister(123456))
+        mq = randn(size(y))
+        Σq = Diagonal(rand(length(y)) .+ 1)
+        gaussian_reconstruction_term(y, Σ, mq, Σq)
+        Zygote.gradient(gaussian_reconstruction_term, y, Σ, mq, Σq)
     end
     @testset "approx_posterior" begin
-        f, x, σ², y = generate_synthetic_problem(MersenneTwister(123456))
+        f, x, Σ, y = generate_synthetic_problem(MersenneTwister(123456))
 
         # Compute natural pseudo-observations and approximate posterior.
-        η1, η2 = natural_from_canonical(y, σ²)
+        η1, η2 = natural_from_canonical(y, Σ)
         f_post_approx = approx_posterior(f, x, η1, η2)
 
         # Compute the exact posterior.
-        f_post_exact = posterior(f(x, σ²), y)
+        f_post_exact = posterior(f(x, Σ), y)
 
         # The exact and approximate posteriors should be identical in this case.
         # Check that this is the case by comparing the statistics at some test points.
@@ -25,15 +25,15 @@
         @test std.(ms_exact) ≈ std.(ms_approx) rtol=1e-6
     end
     @testset "update_approx_posterior" begin
-        f, x, σ², y = generate_synthetic_problem(MersenneTwister(123456))
+        f, x, Σ, y = generate_synthetic_problem(MersenneTwister(123456))
 
         # Reconstruction term and its gradient for Gaussian likelihood.
-        r(m̃, σ̃²) = gaussian_reconstruction_term(y, σ², m̃, σ̃²)
+        r(m̃, σ̃²) = gaussian_reconstruction_term(y, Σ, m̃, σ̃²)
 
         @testset "optimal parameters don't change when updated" begin
 
             # Run a step of the update procedure.
-            η1, η2 = natural_from_canonical(y, σ²)
+            η1, η2 = natural_from_canonical(y, Σ)
             η1_new, η2_new, delta_norm = update_approx_posterior(f, x, η1, η2, r, 1.0)
 
             # Verify that the new parameters are equal to the old parameters.
@@ -47,107 +47,108 @@
         @testset "optimal in 1 step" begin
 
             # Perform a single update step with unit step size.
-            η1, η2 = natural_from_canonical(y .+ randn(length(y)), σ² .+ rand(length(y)))
+            N = length(y)
+            η1, η2 = natural_from_canonical(y .+ randn(N), Σ + Diagonal(rand(N)))
             η1_opt, η2_opt, _ = update_approx_posterior(f, x, η1, η2, r, 1.0)
 
             # Ensure that we've reached the optimum (the exact posterior).
-            y_opt, σ²_opt = canonical_from_natural(η1_opt, η2_opt)
+            y_opt, Σ_opt = canonical_from_natural(η1_opt, η2_opt)
             @test y ≈ y_opt
-            @test σ² ≈ σ²_opt
+            @test Σ ≈ Σ_opt
         end
     end
     @testset "optimise_approx_posterior" begin
-        f, x, σ², y = generate_synthetic_problem(MersenneTwister(123456))
+        f, x, Σ, y = generate_synthetic_problem(MersenneTwister(123456))
 
         # Reconstruction term and its gradient for Gaussian likelihood.
-        r(m̃, σ̃²) = gaussian_reconstruction_term(y, σ², m̃, σ̃²)
+        r(m̃, σ̃²) = gaussian_reconstruction_term(y, Σ, m̃, σ̃²)
 
         @testset "converges quickly for step size $ρ" for ρ in [0.1, 0.5, 0.9, 1.0]
-            η1, η2 = natural_from_canonical(y, σ²)
+            η1, η2 = natural_from_canonical(y, Σ)
             η1_0 = η1 + randn(length(η1))
-            η2_0 = η2 - rand(length(y))
+            η2_0 = η2 - Diagonal(rand(length(y)))
             η1_opt, η2_opt, _ = optimise_approx_posterior(f, x, η1_0, η2_0, r, ρ)
             @test η1_opt ≈ η1
             @test η2_opt ≈ η2
         end
     end
     @testset "elbo" begin
-        f, x, σ², y = generate_synthetic_problem(MersenneTwister(123456))
+        f, x, Σ, y = generate_synthetic_problem(MersenneTwister(123456))
 
         # Set initial parameters to be sub-optimal.
-        η1, η2 = natural_from_canonical(y, σ²)
+        η1, η2 = natural_from_canonical(y, Σ)
         η1_0 = η1 + randn(length(η1))
-        η2_0 = η2 - rand(length(y))
+        η2_0 = η2 - Diagonal(rand(length(y)))
 
         # Specify the reconstruction term.
-        r(m̃, σ̃²) = gaussian_reconstruction_term(y, σ², m̃, σ̃²)
+        r(m̃, σ̃²) = gaussian_reconstruction_term(y, Σ, m̃, σ̃²)
 
         # Verify that the ELBO is less than the log marginal likelihood for a Gaussian.
-        @test elbo(f, x, η1_0, η2_0, r) < logpdf(f(x, σ²), y)
+        @test elbo(f, x, η1_0, η2_0, r) < logpdf(f(x, Σ), y)
 
         # Verify that the ELBO equals the log marginal likelihood at the optimum.
-        @test elbo(f, x, η1, η2, r) ≈ logpdf(f(x, σ²), y)
+        @test elbo(f, x, η1, η2, r) ≈ logpdf(f(x, Σ), y)
 
         # Verify that the gradient w.r.t. everything can be computed using Zygote.
         Zygote.gradient(elbo, f, x, η1, η2, r)
     end
     @testset "batch_quadrature" begin
-        f, x, σ², y = generate_synthetic_problem(MersenneTwister(123456))
+        f, x, Σ, y = generate_synthetic_problem(MersenneTwister(123456))
         function make_integrand(y, σ²)
             return f -> logpdf(Normal(f, sqrt(σ²)), y)
         end
-        integrands = map(make_integrand, y, σ²)
+        integrands = map(make_integrand, y, diag(Σ))
 
         # Specify the reconstruction term.
-        r(m̃, σ̃²) = sum(batch_quadrature(integrands, m̃, sqrt.(σ̃²), 25))
+        r(m̃, σ̃²) = sum(batch_quadrature(integrands, m̃, sqrt.(diag(σ̃²)), 25))
 
         # Ensure that it's close to the exact reconstruction term in the Gaussian case.
-        m̃ = randn(length(y))
-        σ̃² = rand(length(y)) .+ 1
-        @test r(m̃, σ̃²) ≈ gaussian_reconstruction_term(y, σ², m̃, σ̃²)
+        mq = randn(length(y))
+        Σq = Diagonal(rand(length(y)) .+ 1)
+        @test r(mq, Σq) ≈ gaussian_reconstruction_term(y, Σ, mq, Σq)
 
         # Check that the gradients agree.
-        Δm̃_exact, Δσ̃²_exact = Zygote.gradient(
-            (m̃, σ̃²) -> gaussian_reconstruction_term(y, σ², m̃, σ̃²), m̃, σ̃²,
+        Δmq_exact, ΔΣq_exact = Zygote.gradient(
+            (m̃, σ̃²) -> gaussian_reconstruction_term(y, Σ, m̃, σ̃²), mq, Σq,
         )
-        Δm̃_quad, Δσ̃²_quad = Zygote.gradient(r, m̃, σ̃²)
-        @test Δm̃_exact ≈ Δm̃_quad
-        @test Δσ̃²_exact ≈ Δσ̃²_quad
+        Δmq_quad, ΔΣq_quad = Zygote.gradient(r, mq, Σq)
+        @test Δmq_exact ≈ Δmq_quad
+        @test ΔΣq_exact ≈ ΔΣq_quad
     end
     @testset "Gaussian likelihood via Quadature" begin
-        f, x, σ², y = generate_synthetic_problem(MersenneTwister(123456))
+        f, x, Σ, y = generate_synthetic_problem(MersenneTwister(123456))
         function make_integrand(y, σ²)
             return f -> logpdf(Normal(f, sqrt(σ²)), y)
         end
-        integrands = map(make_integrand, y, σ²)
+        integrands = map(make_integrand, y, diag(Σ))
 
         # Set initial parameters to be sub-optimal.
-        η1, η2 = natural_from_canonical(y, σ²)
+        η1, η2 = natural_from_canonical(y, Σ)
         η1_0 = η1 + randn(length(η1))
-        η2_0 = η2 - rand(length(y))
+        η2_0 = η2 - Diagonal(rand(length(y)))
 
         # Specify the reconstruction term.
-        r(m̃, σ̃²) = sum(batch_quadrature(integrands, m̃, sqrt.(σ̃²), 25))
+        r(m̃, σ̃²) = sum(batch_quadrature(integrands, m̃, sqrt.(diag(σ̃²)), 25))
 
         # Ensure that it's close to the exact reconstruction term in the Gaussian case.
-        m̃ = randn(length(y))
-        σ̃² = rand(length(y)) .+ 1
-        @test r(m̃, σ̃²) ≈ gaussian_reconstruction_term(y, σ², m̃, σ̃²)
+        mq = randn(length(y))
+        Σq = Diagonal(rand(length(y)) .+ 1)
+        @test r(mq, Σq) ≈ gaussian_reconstruction_term(y, Σ, mq, Σq)
 
         @testset "converges quickly for step size $ρ" for ρ in [0.1, 0.5, 0.9, 1.0]
-            η1, η2 = natural_from_canonical(y, σ²)
+            η1, η2 = natural_from_canonical(y, Σ)
             η1_0 = η1 + randn(length(η1))
-            η2_0 = η2 - rand(length(y))
+            η2_0 = η2 - Diagonal(rand(length(y)))
             η1_opt, η2_opt, _, _ = optimise_approx_posterior(f, x, η1_0, η2_0, r, ρ)
             @test η1_opt ≈ η1
             @test η2_opt ≈ η2
         end
         @testset "elbo" begin
             # Verify that the ELBO is less than the log marginal likelihood for a Gaussian.
-            @test elbo(f, x, η1_0, η2_0, r) < logpdf(f(x, σ²), y)
+            @test elbo(f, x, η1_0, η2_0, r) < logpdf(f(x, Σ), y)
 
             # Verify that the ELBO equals the log marginal likelihood at the optimum.
-            @test elbo(f, x, η1, η2, r) ≈ logpdf(f(x, σ²), y)
+            @test elbo(f, x, η1, η2, r) ≈ logpdf(f(x, Σ), y)
 
             # Verify that the gradient w.r.t. everything can be computed using Zygote.
             Zygote.gradient(elbo, f, x, η1, η2, r)
@@ -164,11 +165,11 @@
         integrands = map(make_integrand, y)
 
         # Specify the reconstruction term.
-        r(m̃, σ̃²) = sum(batch_quadrature(integrands, m̃, sqrt.(σ̃²), 25))
+        r(m̃, σ̃²) = sum(batch_quadrature(integrands, m̃, sqrt.(diag(σ̃²)), 25))
 
         # Set initial parameters to be... something.
         η1_0 = randn(length(y))
-        η2_0 = - rand(length(y))
+        η2_0 = Diagonal(- rand(length(y)))
 
         @testset "solutions converge to the same thing" begin
             solutions = map([0.1, 0.5, 0.9, 0.95, 0.99]) do ρ

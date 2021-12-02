@@ -62,7 +62,7 @@ function build_latent_gp(θ::AbstractVector{<:Real})
     return build_latent_gp(ParameterHandling.value(unflatten(θ)))
 end
 function build_latent_gp(θ::NamedTuple)
-    gp = GP(θ.scale * AbstractGPs.transform(SEKernel(), θ.stretch))
+    gp = GP(θ.scale * SEKernel() ∘ AbstractGPs.ScaleTransform(θ.stretch))
     lik = UnivariateFactorisedLikelihood(f -> Bernoulli(logistic(f)))
     return LatentGP(gp, lik, 1e-9)
 end
