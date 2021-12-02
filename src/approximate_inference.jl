@@ -51,15 +51,6 @@ function gaussian_reconstruction_term(
     )
 end
 
-# function gaussian_reconstruction_term(
-#     y::AbstractVector{<:Real},
-#     σ²::AbstractVector{<:Real},
-#     m̃::AbstractVector{<:Real},
-#     σ̃²::AbstractVector{<:Real},
-# )
-#     return gaussian_reconstruction_term(y, Diagonal(σ²), m̃, Diagonal(σ̃²))
-# end
-
 """
     approx_posterior(
         f::AbstractGP,
@@ -80,16 +71,6 @@ function approx_posterior(
     y, Σ = canonical_from_natural(η1, η2)
     return posterior(f(x, Σ + 1e-6 * I), y)
 end
-
-# function approx_posterior(
-#     f::AbstractGP,
-#     x::AbstractVector,
-#     η1::AbstractVector{<:Real},
-#     η2::AbstractMatrix{<:Real},
-# )
-#     y, σ² = canonical_from_natural(η1, η2)
-#     return posterior(f(x, σ² .+ 1e-6), y)
-# end
 
 """
     update_approx_posterior(
