@@ -1,7 +1,7 @@
 name = "ConjugateComputationVI"
 uuid = "f4ace912-77ac-4801-b600-bd6f88c28557"
 authors = ["Will Tebbutt and contributors"]
-version = "0.1.2"
+version = "0.2.0"
 
 [deps]
 AbstractGPs = "99985d1d-32ba-4be9-9821-2ec096f28918"
@@ -12,8 +12,8 @@ Optim = "429524aa-4258-5aef-a3af-852621145aeb"
 Zygote = "e88e6eb3-aa80-5325-afca-941959d7151f"
 
 [compat]
-AbstractGPs = "0.3"
-ChainRulesCore = "0.10"
+AbstractGPs = "0.5"
+ChainRulesCore = "1"
 FastGaussQuadrature = "0.4"
 Optim = "1"
 Zygote = "0.6"

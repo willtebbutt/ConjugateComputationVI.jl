@@ -5,7 +5,12 @@ Compute natural parameters `η1` and `η2` from canonical paramters `y` and `σ�
 Inverse of [`canonical_from_natural`](@ref).
 """
 function natural_from_canonical(y::AbstractVector{<:Real}, σ²::AbstractVector{<:Real})
-    return y ./ σ², (-1) ./ (2 .* σ²)
+    η1, η2 = natural_from_canonical(y, Diagonal(σ²))
+    return η1, η2.diag
+end
+
+function natural_from_canonical(y::AbstractVector{<:Real}, Σ::Diagonal{<:Real})
+    return Σ \ y, -inv(Σ) / 2
 end
 
 """
@@ -15,9 +20,14 @@ Compute canonical parameters `y` and `σ²` from natural parameters `η1` and `�
 Inverse of [`natural_from_canonical`](@ref).
 """
 function canonical_from_natural(η1::AbstractVector{<:Real}, η2::AbstractVector{<:Real})
-    σ² = -1 ./ (2 .* η2)
-    y = σ² .* η1
-    return y, σ²
+    y, Σ = canonical_from_natural(η1, Diagonal(η2))
+    return y, diag(Σ)
+end
+
+function canonical_from_natural(η1::AbstractVector{<:Real}, η2::Diagonal{<:Real})
+    Σ = -inv(η2) / 2
+    y = Σ * η1
+    return y, Σ
 end
 
 """
@@ -27,7 +37,12 @@ Compute expectation parameters `m1` and `m2` from canonical parameters `m` and `
 Inverse of [`expectation_from_canonical`](@ref).
 """
 function expectation_from_canonical(m::AbstractVector{<:Real}, σ²::AbstractVector{<:Real})
-    return m, m.^2 .+ σ²
+    m, S = expectation_from_canonical(m, Diagonal(σ²))
+    return m, diag(S)
+end
+
+function expectation_from_canonical(m::AbstractVector{<:Real}, Σ::Diagonal{<:Real})
+    return m, Diagonal(m.^2 + diag(Σ))
 end
 
 """
@@ -37,23 +52,10 @@ Compute canonical parameters `m` and `σ²` from expectation parameters `m1` and
 Inverse of [`expectation_from_canonical`](@ref).
 """
 function canonical_from_expectation(m1::AbstractVector{<:Real}, m2::AbstractVector{<:Real})
-    return m1, m2 .- m1.^2
+    m1, M2 = canonical_from_expectation(m1, Diagonal(m2))
+    return m1, diag(M2)
 end
 
-function Zygote._pullback(
-    ::Zygote.AContext,
-    ::typeof(canonical_from_expectation),
-    m1::AbstractVector{<:Real},
-    m2::AbstractVector{<:Real},
-)
-    function canonical_from_expectation_pullback(Δ)
-        Δ === nothing && return nothing
-        Δm = Δ[1]
-        Δσ² = Δ[2]
-
-        Δm1 = Δm .- 2 .* Δσ² .* m1
-        Δm2 = Δσ²
-        return (nothing, Δm1, Δm2)
-    end
-    return canonical_from_expectation(m1, m2), canonical_from_expectation_pullback
+function canonical_from_expectation(m1::AbstractVector{<:Real}, M2::Diagonal{<:Real})
+    return m1, Diagonal(diag(M2) .- m1.^2)
 end

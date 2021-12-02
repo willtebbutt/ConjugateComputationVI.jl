@@ -3,6 +3,7 @@ using ConjugateComputationVI
 using Distributions
 using FiniteDifferences
 using KernelFunctions
+using LinearAlgebra
 using Random
 using StatsFuns
 # using TemporalGPs
@@ -23,9 +24,9 @@ using ConjugateComputationVI:
 function generate_synthetic_problem(rng::AbstractRNG)
     f = GP(Matern52Kernel())
     x = collect(range(-2.0, 2.0; length=7))
-    σ² = rand(rng, 7) .+ 1e-2
-    y = rand(rng, f(x, σ²))
-    return f, x, σ², y
+    Σ = Diagonal(rand(rng, 7) .+ 1e-2)
+    y = rand(rng, f(x, Σ))
+    return f, x, Σ, y
 end
 
 @testset "ConjugateComputationVI.jl" begin
