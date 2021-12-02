@@ -3,6 +3,7 @@ using ConjugateComputationVI
 using Distributions
 using FiniteDifferences
 using KernelFunctions
+using LinearAlgebra
 using Random
 using StatsFuns
 # using TemporalGPs
