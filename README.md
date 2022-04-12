@@ -110,7 +110,7 @@ See the examples directory for more.
 # Limitations
 
 This approximation does not presently play nicely with pseudo-point approximations.
-That would be an interesting research direction.
+It could be extended to do so, in line with [this work](https://proceedings.neurips.cc/paper/2021/hash/5fcc629edc0cfa360016263112fe8058-Abstract.html).
 
 
 
