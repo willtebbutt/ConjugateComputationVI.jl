@@ -44,7 +44,7 @@ function build_latent_gp(θ::AbstractVector{<:Real})
     return build_latent_gp(ParameterHandling.value(unflatten(θ)))
 end
 function build_latent_gp(θ::NamedTuple)
-    gp = GP(θ.scale * AbstractGPs.transform(SEKernel(), θ.stretch))
+    gp = GP(θ.scale * SEKernel() ∘ ScaleTransform(θ.stretch))
     lik = UnivariateFactorisedLikelihood(f -> Exponential(exp(f)))
     return LatentGP(gp, lik, 1e-9)
 end
