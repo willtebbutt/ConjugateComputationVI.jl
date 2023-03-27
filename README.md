@@ -110,10 +110,12 @@ See the examples directory for more.
 # Limitations
 
 This approximation does not presently play nicely with pseudo-point approximations.
-It could be extended to do so, in line with [this work](https://proceedings.neurips.cc/paper/2021/hash/5fcc629edc0cfa360016263112fe8058-Abstract.html).
+It could be extended to do so, in line with [2].
 
 
 
 # References
 
 [1] - Khan, Mohammad, and Wu Lin. "Conjugate-computation variational inference: Converting variational inference in non-conjugate models to inferences in conjugate models." Artificial Intelligence and Statistics. PMLR, 2017.
+
+[2] - Adam, Vincent et al. "Dual parameterization of sparse variational gaussian processes." NeurIPS, 2021. [link](https://proceedings.neurips.cc/paper/2021/hash/5fcc629edc0cfa360016263112fe8058-Abstract.html)
